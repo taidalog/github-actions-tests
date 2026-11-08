@@ -53,7 +53,8 @@ jobs:
           gh release create "$TAG_NAME" \
             --target "$GITHUB_SHA" \
             --title "$RELEASE_TITLE" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            --generate-notes
 
           # 7. Close the milestone after the release succeeds
           echo "Closing milestone #${MILESTONE_NUMBER} (${MILESTONE_TITLE})..."

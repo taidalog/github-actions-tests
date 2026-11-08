@@ -34,7 +34,7 @@ jobs:
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
           # Searchs for open milestone with the version name.
-          MILESTONE_BODY=$(gh milestone list --state open --json title,description --jq ".[] | select(.title == \"$VERSION\") | .description")
+          MILESTONE_BODY=$(gh api repos/:owner/:repo/milestones --jq '.[] | select(.title == "$VERSION") | .description')
 
           if [ -z "$MILESTONE_BODY" ]; then
             MILESTONE_BODY="Automated Release PR for version $VERSION."

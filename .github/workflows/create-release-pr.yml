@@ -1,0 +1,56 @@
+name: Create Release PR from Milestone
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "lts"
+
+      - name: Get Version
+        id: meta
+        run: |
+          VERSION=$(dotnet msbuild src/App.fsproj --getProperty:Version | xargs)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted Version: $VERSION"
+
+      - name: Fetch Milestone Details
+        id: milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Searchs for open milestone with the version name.
+          MILESTONE_BODY=$(gh milestone list --state open --json title,description --jq ".[] | select(.title == \"$VERSION\") | .description")
+
+          if [ -z "$MILESTONE_BODY" ]; then
+            MILESTONE_BODY="Automated Release PR for version $VERSION."
+          fi
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$MILESTONE_BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request via GH CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          gh pr create \
+            --base main \
+            --head develop \
+            --title "Release $VERSION" \
+            --body "${{ steps.milestone.outputs.body }}"

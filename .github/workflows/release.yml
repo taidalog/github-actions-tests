@@ -1,0 +1,61 @@
+name: Release by Milestone
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Process Release and Milestone
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # 1. Get the title and ID of the milestone associated with the PR
+          MILESTONE_DATA=$(gh pr view "$PR_NUMBER" --json milestone --jq '.milestone')
+          MILESTONE_TITLE=$(echo "$MILESTONE_DATA" | jq -r '.title')
+          MILESTONE_NUMBER=$(echo "$MILESTONE_DATA" | jq -r '.number')
+
+          # 2. Exit with an error if no milestone is set
+          if [ -z "$MILESTONE_TITLE" ] || [ "$MILESTONE_TITLE" = "null" ]; then
+            echo "Error: This PR does not have a milestone attached."
+            exit 1
+          fi
+
+          # 3. Determine the tag name (1.0.0 -> v1.0.0)
+          TAG_NAME="v${MILESTONE_TITLE#v}"
+          RELEASE_TITLE="$MILESTONE_TITLE"
+
+          # 4. Check whether a tag with the same name already exists
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Error: Release tag '${TAG_NAME}' already exists."
+            exit 1
+          fi
+
+          # 5. Write the PR body to a temporary file
+          echo "$PR_BODY" > release_notes.md
+
+          # 6. Create the release and tag
+          echo "Creating GitHub Release: ${TAG_NAME}..."
+          gh release create "$TAG_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes-file release_notes.md
+
+          # 7. Close the milestone after the release succeeds
+          echo "Closing milestone #${MILESTONE_NUMBER} (${MILESTONE_TITLE})..."
+          gh api -X PATCH "repos/${{ github.repository }}/milestones/${MILESTONE_NUMBER}" \
+            -f state="closed"
